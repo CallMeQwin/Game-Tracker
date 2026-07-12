@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="ValorantTracker.App/ValorantTracker.App.csproj" />
+  <Project Path="ValorantTracker.Core/ValorantTracker.Core.csproj" />
+</Solution>
