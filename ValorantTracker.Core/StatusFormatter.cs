@@ -26,12 +26,14 @@ namespace ValorantTracker.Core
                 "PREGAME" => "Agent Select",
                 "INGAME" => string.IsNullOrEmpty(mode)
                     ? "In Match (The Range / Custom Game)"
-                    : $"Playing: {FormatMode(mode)}",
+                    : $"Playing: {FormatModeName(mode)}",
                 _ => state
             };
         }
 
-        private static string FormatMode(string mode) =>
-            ModeNames.TryGetValue(mode, out var friendly) ? friendly : mode;
+        public static string FormatModeName(string? mode) =>
+            string.IsNullOrEmpty(mode)
+                ? "The Range / Custom Game"
+                : ModeNames.TryGetValue(mode, out var friendly) ? friendly : mode;
     }
 }

@@ -4,6 +4,215 @@
              xmlns:local="clr-namespace:ValorantTracker.App"
              ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
-         
+
+        <!-- ===== Palette ===== -->
+        <Color x:Key="InkColor">#14161B</Color>
+        <Color x:Key="SurfaceColor">#1B1E25</Color>
+        <Color x:Key="SurfaceRaisedColor">#22262F</Color>
+        <Color x:Key="HairlineColor">#2B2F39</Color>
+        <Color x:Key="TextColor">#ECEEF2</Color>
+        <Color x:Key="TextMutedColor">#868C99</Color>
+        <Color x:Key="ActiveColor">#46E0A0</Color>
+        <Color x:Key="IdleColor">#F2B84B</Color>
+        <Color x:Key="AlertColor">#FF5C5C</Color>
+        <Color x:Key="OffColor">#4A4F5C</Color>
+
+        <SolidColorBrush x:Key="InkBrush" Color="{StaticResource InkColor}"/>
+        <SolidColorBrush x:Key="SurfaceBrush" Color="{StaticResource SurfaceColor}"/>
+        <SolidColorBrush x:Key="SurfaceRaisedBrush" Color="{StaticResource SurfaceRaisedColor}"/>
+        <SolidColorBrush x:Key="HairlineBrush" Color="{StaticResource HairlineColor}"/>
+        <SolidColorBrush x:Key="TextBrush" Color="{StaticResource TextColor}"/>
+        <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource TextMutedColor}"/>
+        <SolidColorBrush x:Key="ActiveBrush" Color="{StaticResource ActiveColor}"/>
+        <SolidColorBrush x:Key="IdleBrush" Color="{StaticResource IdleColor}"/>
+        <SolidColorBrush x:Key="AlertBrush" Color="{StaticResource AlertColor}"/>
+        <SolidColorBrush x:Key="OffBrush" Color="{StaticResource OffColor}"/>
+
+        <!-- ===== Type ===== -->
+        <FontFamily x:Key="DisplayFont">Bahnschrift SemiBold</FontFamily>
+        <FontFamily x:Key="MonoFont">Consolas</FontFamily>
+
+        <Style x:Key="EyebrowLabel" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource DisplayFont}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}"/>
+        </Style>
+
+        <Style x:Key="StatNumber" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource DisplayFont}"/>
+            <Setter Property="FontSize" Value="30"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+        </Style>
+
+        <Style x:Key="MonoLabel" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}"/>
+        </Style>
+
+        <!-- Corner-bracket: an L stroke forming the top-left corner of a target-lock frame.
+             Rotate 90/180/270 to place at the other three corners. -->
+        <Style x:Key="CornerBracket" TargetType="Path">
+            <Setter Property="Data" Value="M0,9 L0,0 L9,0"/>
+            <Setter Property="Stroke" Value="{StaticResource ActiveBrush}"/>
+            <Setter Property="StrokeThickness" Value="1.5"/>
+            <Setter Property="Width" Value="9"/>
+            <Setter Property="Height" Value="9"/>
+        </Style>
+
+        <!-- ===== Caption bar buttons ===== -->
+        <Style x:Key="CaptionButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="32"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}"/>
+            <Setter Property="FontFamily" Value="Segoe UI"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" Background="{TemplateBinding Background}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{StaticResource SurfaceRaisedBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="CaptionCloseButtonStyle" TargetType="Button" BasedOn="{StaticResource CaptionButtonStyle}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" Background="{TemplateBinding Background}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{StaticResource AlertBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ===== Period tab (chip) ===== -->
+        <Style x:Key="PeriodTabStyle" TargetType="RadioButton">
+            <Setter Property="FontFamily" Value="{StaticResource DisplayFont}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}"/>
+            <Setter Property="Padding" Value="0,0,0,8"/>
+            <Setter Property="Margin" Value="0,0,20,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="2"/>
+                            </Grid.RowDefinitions>
+                            <ContentPresenter x:Name="Content" Grid.Row="0" HorizontalAlignment="Left" Margin="{TemplateBinding Padding}"/>
+                            <Border x:Name="Underline" Grid.Row="1" Background="{StaticResource ActiveBrush}" Opacity="0"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Underline" Property="Opacity" Value="1"/>
+                                <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ===== Sidebar nav item ===== -->
+        <Style x:Key="NavItemStyle" TargetType="RadioButton">
+            <Setter Property="FontFamily" Value="{StaticResource DisplayFont}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}"/>
+            <Setter Property="Padding" Value="14,10"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="3"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border x:Name="Accent" Grid.Column="0" Background="{StaticResource ActiveBrush}" Opacity="0"/>
+                            <Border x:Name="Bg" Grid.Column="1" Background="Transparent">
+                                <ContentPresenter Margin="{TemplateBinding Padding}" VerticalAlignment="Center"/>
+                            </Border>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Accent" Property="Opacity" Value="1"/>
+                                <Setter TargetName="Bg" Property="Background" Value="{StaticResource SurfaceRaisedBrush}"/>
+                                <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ===== Dark scrollbar ===== -->
+        <Style x:Key="DarkScrollThumb" TargetType="Thumb">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Border Background="{StaticResource HairlineBrush}" CornerRadius="3" Margin="2,0"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ScrollBar">
+            <Setter Property="Width" Value="10"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Grid Background="Transparent">
+                            <Track x:Name="PART_Track" IsDirectionReversed="True">
+                                <Track.Thumb>
+                                    <Thumb Style="{StaticResource DarkScrollThumb}"/>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ===== Live status dot pulse ===== -->
+        <Storyboard x:Key="PulseStoryboard" RepeatBehavior="Forever">
+            <DoubleAnimation Storyboard.TargetName="PulseRing" Storyboard.TargetProperty="Opacity"
+                              From="0.55" To="0" Duration="0:0:1.4"/>
+            <DoubleAnimationUsingKeyFrames Storyboard.TargetName="PulseRing" Storyboard.TargetProperty="RenderTransform.ScaleX">
+                <LinearDoubleKeyFrame KeyTime="0:0:0" Value="1"/>
+                <LinearDoubleKeyFrame KeyTime="0:0:1.4" Value="2.6"/>
+            </DoubleAnimationUsingKeyFrames>
+            <DoubleAnimationUsingKeyFrames Storyboard.TargetName="PulseRing" Storyboard.TargetProperty="RenderTransform.ScaleY">
+                <LinearDoubleKeyFrame KeyTime="0:0:0" Value="1"/>
+                <LinearDoubleKeyFrame KeyTime="0:0:1.4" Value="2.6"/>
+            </DoubleAnimationUsingKeyFrames>
+        </Storyboard>
+
     </Application.Resources>
 </Application>
