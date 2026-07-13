@@ -8,6 +8,8 @@ using System.Threading.Tasks;
 
 namespace ValorantTracker.Core
 {
+    public record GameState(string SessionLoopState, string? QueueId);
+
     public class ValorantClient
     {
         private static readonly string LockfilePath = Path.Combine(
@@ -60,8 +62,10 @@ namespace ValorantTracker.Core
             return doc.RootElement.GetProperty("puuid").GetString()!;
         }
 
-        // Returns "MENUS", "PREGAME", "INGAME", or null if Valorant isn't running/no data yet.
-        public async Task<string?> GetGameStateAsync()
+        // Returns the current session loop state ("MENUS", "PREGAME", "INGAME") plus the
+        // selected queue/mode ("competitive", "unrated", "deathmatch", etc.), or null if
+        // Valorant isn't running/no data yet.
+        public async Task<GameState?> GetGameStateAsync()
         {
             var response = await _httpClient.GetStringAsync($"https://127.0.0.1:{_port}/chat/v4/presences");
             using var doc = JsonDocument.Parse(response);
@@ -85,9 +89,17 @@ namespace ValorantTracker.Core
                 using var privateDoc = JsonDocument.Parse(privateJson);
 
                 if (privateDoc.RootElement.TryGetProperty("matchPresenceData", out var matchData) &&
-                    matchData.TryGetProperty("sessionLoopState", out var state))
+                    matchData.TryGetProperty("sessionLoopState", out var stateProp))
                 {
-                    return state.GetString();
+                    var state = stateProp.GetString();
+                    if (state == null)
+                        return null;
+
+                    var queueId = matchData.TryGetProperty("queueId", out var queueProp)
+                        ? queueProp.GetString()
+                        : null;
+
+                    return new GameState(state, queueId);
                 }
             }
 

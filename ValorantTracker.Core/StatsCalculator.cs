@@ -7,14 +7,14 @@ namespace ValorantTracker.Core
 
     public static class StatsCalculator
     {
-        public static Stats Calculate(List<(DateTime Timestamp, string State)> events)
+        public static Stats Calculate(List<(DateTime Timestamp, string State, string? Mode)> events)
         {
             var active = TimeSpan.Zero;
             var idle = TimeSpan.Zero;
 
             for (var i = 0; i < events.Count; i++)
             {
-                var (timestamp, state) = events[i];
+                var (timestamp, state, _) = events[i];
                 var end = i + 1 < events.Count ? events[i + 1].Timestamp : DateTime.Now;
                 var duration = end - timestamp;
 

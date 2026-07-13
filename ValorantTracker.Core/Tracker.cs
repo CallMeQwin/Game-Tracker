@@ -17,6 +17,7 @@ namespace ValorantTracker.Core
         private readonly Database _database;
         private ValorantClient? _client;
         private string _lastState = "CLOSED";
+        private string? _lastMode;
 
         public Tracker(Database database)
         {
@@ -27,40 +28,41 @@ namespace ValorantTracker.Core
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                var currentState = await PollStateAsync();
+                var (currentState, currentMode) = await PollStateAsync();
 
-                if (currentState != _lastState)
+                if (currentState != _lastState || currentMode != _lastMode)
                 {
-                    _database.LogEvent(Game, currentState);
-                    Log($"State changed: {_lastState} -> {currentState}");
+                    _database.LogEvent(Game, currentState, currentMode);
+                    Log($"State changed: {_lastState}/{_lastMode} -> {currentState}/{currentMode}");
                     _lastState = currentState;
+                    _lastMode = currentMode;
                 }
 
                 await Task.Delay(PollInterval, cancellationToken);
             }
         }
 
-        private async Task<string> PollStateAsync()
+        private async Task<(string State, string? Mode)> PollStateAsync()
         {
             // Common, expected case: Riot Client just isn't running. Not worth logging.
             if (!ValorantClient.IsRiotClientRunning())
             {
                 _client = null;
-                return "CLOSED";
+                return ("CLOSED", null);
             }
 
             try
             {
                 _client ??= new ValorantClient();
                 var state = await _client.GetGameStateAsync();
-                return state ?? "CLOSED";
+                return state != null ? (state.SessionLoopState, state.QueueId) : ("CLOSED", null);
             }
             catch (Exception ex)
             {
                 // Unexpected: Riot Client is running but something else went wrong (auth, network, parsing).
                 Log($"Unexpected poll error: {ex.Message}");
                 _client = null;
-                return "CLOSED";
+                return ("CLOSED", null);
             }
         }
 
