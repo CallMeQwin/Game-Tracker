@@ -10,23 +10,27 @@ namespace ValorantTracker.Core
 {
     public class ValorantClient
     {
+        private static readonly string LockfilePath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Riot Games", "Riot Client", "Config", "lockfile");
+
         private readonly HttpClient _httpClient;
         private readonly int _port;
         private readonly string _puuid;
 
+        // Cheap check so callers can avoid constructing a client (and throwing) during
+        // the very common case where Riot Client simply isn't running.
+        public static bool IsRiotClientRunning() => File.Exists(LockfilePath);
+
         public ValorantClient()
         {
-            var lockfilePath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Riot Games", "Riot Client", "Config", "lockfile");
-
-            if (!File.Exists(lockfilePath))
+            if (!File.Exists(LockfilePath))
                 throw new InvalidOperationException("Riot Client lockfile not found. Is Riot Client running?");
 
             // Lockfile format: name:PID:port:password:protocol
             // Riot Client holds this file open exclusively, so we must explicitly allow shared access to read it.
             string lockfileContent;
-            using (var stream = new FileStream(lockfilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            using (var stream = new FileStream(LockfilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
             using (var reader = new StreamReader(stream))
             {
                 lockfileContent = reader.ReadToEnd();

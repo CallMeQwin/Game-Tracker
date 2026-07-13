@@ -10,6 +10,10 @@ namespace ValorantTracker.Core
         private const string Game = "Valorant";
         private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(5);
 
+        private static readonly string LogPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "ValorantTracker", "debug.log");
+
         private readonly Database _database;
         private ValorantClient? _client;
         private string _lastState = "CLOSED";
@@ -28,34 +32,33 @@ namespace ValorantTracker.Core
                 if (currentState != _lastState)
                 {
                     _database.LogEvent(Game, currentState);
+                    Log($"State changed: {_lastState} -> {currentState}");
                     _lastState = currentState;
                 }
-
-                var today = DateTime.Now.Date;
-                var stats = StatsCalculator.Calculate(_database.GetEventsSince(Game, today));
-                Log($"Today so far -> Active: {stats.Active}, Idle: {stats.Idle}");
 
                 await Task.Delay(PollInterval, cancellationToken);
             }
         }
 
-        private static readonly string LogPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "ValorantTracker", "debug.log");
-
         private async Task<string> PollStateAsync()
         {
+            // Common, expected case: Riot Client just isn't running. Not worth logging.
+            if (!ValorantClient.IsRiotClientRunning())
+            {
+                _client = null;
+                return "CLOSED";
+            }
+
             try
             {
                 _client ??= new ValorantClient();
                 var state = await _client.GetGameStateAsync();
-                Log($"Polled state: {state}");
                 return state ?? "CLOSED";
             }
             catch (Exception ex)
             {
-                // Riot Client not running, lockfile missing, or Valorant not open.
-                Log($"Poll failed: {ex}");
+                // Unexpected: Riot Client is running but something else went wrong (auth, network, parsing).
+                Log($"Unexpected poll error: {ex.Message}");
                 _client = null;
                 return "CLOSED";
             }
