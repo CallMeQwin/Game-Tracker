@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Windows;
 using System.Windows.Threading;
 using ValorantTracker.Core;
@@ -30,10 +31,18 @@ public partial class MainWindow : Window
     {
         var today = DateTime.Now.Date;
         var events = _database.GetEventsSince(Game, today);
-        var stats = StatsCalculator.Calculate(events);
 
-        ActiveText.Text = Format(stats.Active);
-        IdleText.Text = Format(stats.Idle);
+        var dailyStats = StatsCalculator.Calculate(events);
+        ActiveText.Text = Format(dailyStats.Active);
+        IdleText.Text = Format(dailyStats.Idle);
+
+        var sessions = SessionCalculator.Calculate(events);
+        SessionsList.ItemsSource = sessions
+            .OrderByDescending(s => s.Start)
+            .Select(s =>
+                $"{s.Start:h:mm tt} - {(s.End.HasValue ? s.End.Value.ToString("h:mm tt") : "ongoing")}  " +
+                $"|  Active: {Format(s.Active)}, Idle: {Format(s.Idle)}")
+            .ToList();
     }
 
     private static string Format(TimeSpan span) => $"{(int)span.TotalHours}h {span.Minutes}m";
