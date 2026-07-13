@@ -16,10 +16,12 @@ public partial class MainWindow : Window
     private const string Game = "Valorant";
     private const double PixelsPerMinute = 1.4;
     private const double LabelGutterWidth = 46;
-    private const double MinCardHeight = 34;
+    private const double MinCardHeight = 58;
 
     private readonly Database _database;
     private readonly DispatcherTimer _refreshTimer;
+    private List<Session> _lastSessions = new();
+    private bool _showingTimeline;
 
     public MainWindow(Database database)
     {
@@ -29,6 +31,15 @@ public partial class MainWindow : Window
         // Setting IsChecked here (after InitializeComponent, not in XAML) fires
         // Period_Changed -> RefreshStats() safely, once everything is constructed.
         TodayRadio.IsChecked = true;
+
+        // Re-render the timeline (using the already-fetched sessions, no DB hit)
+        // whenever the window is resized, so cards resize immediately instead of
+        // waiting for the next 5-second refresh tick.
+        TimelineScroll.SizeChanged += (_, _) =>
+        {
+            if (_showingTimeline)
+                RenderTimeline(_lastSessions);
+        };
 
         _refreshTimer = new DispatcherTimer
         {
@@ -58,11 +69,12 @@ public partial class MainWindow : Window
         var isToday = periodStart == today;
         SessionsHeader.Visibility = isToday ? Visibility.Visible : Visibility.Collapsed;
         TimelineBorder.Visibility = isToday ? Visibility.Visible : Visibility.Collapsed;
+        _showingTimeline = isToday;
 
         if (isToday)
         {
-            var sessions = SessionCalculator.Calculate(events);
-            RenderTimeline(sessions);
+            _lastSessions = SessionCalculator.Calculate(events);
+            RenderTimeline(_lastSessions);
         }
     }
 
@@ -71,18 +83,15 @@ public partial class MainWindow : Window
         TimelineCanvas.Children.Clear();
 
         var now = DateTime.Now;
-        var rangeStart = (sessions.Count > 0 ? sessions.Min(s => s.Start) : now).Date
-            .AddHours((sessions.Count > 0 ? sessions.Min(s => s.Start) : now).Hour);
-        var rangeEndSource = sessions.Count > 0
-            ? sessions.Max(s => s.End ?? now)
-            : now;
-        var rangeEnd = rangeEndSource.Date.AddHours(rangeEndSource.Hour + 1);
-        if (rangeEnd < now.Date.AddHours(now.Hour + 1) && sessions.Any(s => s.End == null))
-            rangeEnd = now.Date.AddHours(now.Hour + 1);
+        var rangeStart = now.Date;
+        var rangeEnd = rangeStart.AddDays(1);
 
         var totalMinutes = (rangeEnd - rangeStart).TotalMinutes;
         var canvasHeight = totalMinutes * PixelsPerMinute;
-        var canvasWidth = Math.Max(TimelineScroll.ActualWidth - 4, 300);
+        // ViewportWidth lags a frame behind ActualWidth during resize (it's recalculated
+        // after the SizeChanged event fires), so subtract the scrollbar width from
+        // ActualWidth directly instead — deterministic, no timing dependency.
+        var canvasWidth = Math.Max(TimelineScroll.ActualWidth - SystemParameters.VerticalScrollBarWidth - 4, 300);
 
         TimelineCanvas.Width = canvasWidth;
         TimelineCanvas.Height = canvasHeight;
@@ -145,16 +154,16 @@ public partial class MainWindow : Window
                 {
                     Children =
                     {
-                        new TextBlock { Text = title, FontSize = 12, FontWeight = FontWeights.SemiBold },
-                        new TextBlock { Text = timeRange, FontSize = 10, Foreground = Brushes.DimGray },
-                        new TextBlock { Text = breakdown, FontSize = 10, Foreground = Brushes.DimGray }
+                        new TextBlock { Text = title, FontSize = 12, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap },
+                        new TextBlock { Text = timeRange, FontSize = 10, Foreground = Brushes.DimGray, TextWrapping = TextWrapping.Wrap },
+                        new TextBlock { Text = breakdown, FontSize = 10, Foreground = Brushes.DimGray, TextWrapping = TextWrapping.Wrap }
                     }
                 }
             };
 
             Canvas.SetLeft(card, LabelGutterWidth + 4);
             Canvas.SetTop(card, top);
-            card.Width = canvasWidth - LabelGutterWidth - 8;
+            card.Width = canvasWidth - LabelGutterWidth - 16;
             card.Height = height;
             TimelineCanvas.Children.Add(card);
         }
