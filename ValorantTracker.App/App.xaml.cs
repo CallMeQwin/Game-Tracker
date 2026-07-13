@@ -12,18 +12,21 @@ public partial class App : System.Windows.Application
 {
     private NotifyIcon? _notifyIcon;
     private CancellationTokenSource? _cancellationTokenSource;
+    private Database? _database;
+    private MainWindow? _mainWindow;
 
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
 
-        var database = new Database();
-        var tracker = new Tracker(database);
+        _database = new Database();
+        var tracker = new Tracker(_database);
 
         _cancellationTokenSource = new CancellationTokenSource();
         Task.Run(() => tracker.RunAsync(_cancellationTokenSource.Token));
 
         var contextMenu = new ContextMenuStrip();
+        contextMenu.Items.Add("Show Stats", null, (_, _) => ShowMainWindow());
         contextMenu.Items.Add("Exit", null, (_, _) => ExitApplication());
 
         _notifyIcon = new NotifyIcon
@@ -33,6 +36,19 @@ public partial class App : System.Windows.Application
             Text = "Valorant Tracker",
             ContextMenuStrip = contextMenu
         };
+        _notifyIcon.DoubleClick += (_, _) => ShowMainWindow();
+    }
+
+    private void ShowMainWindow()
+    {
+        if (_mainWindow == null)
+        {
+            _mainWindow = new MainWindow(_database!);
+            _mainWindow.Closed += (_, _) => _mainWindow = null;
+        }
+
+        _mainWindow.Show();
+        _mainWindow.Activate();
     }
 
     private void ExitApplication()

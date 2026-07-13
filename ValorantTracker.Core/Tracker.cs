@@ -31,6 +31,10 @@ namespace ValorantTracker.Core
                     _lastState = currentState;
                 }
 
+                var today = DateTime.Now.Date;
+                var stats = StatsCalculator.Calculate(_database.GetEventsSince(Game, today));
+                Log($"Today so far -> Active: {stats.Active}, Idle: {stats.Idle}");
+
                 await Task.Delay(PollInterval, cancellationToken);
             }
         }

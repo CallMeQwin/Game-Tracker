@@ -1,12 +1,16 @@
-﻿<Window x:Class="ValorantTracker.App.MainWindow"
+<Window x:Class="ValorantTracker.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:ValorantTracker.App"
-        mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
-    <Grid>
+        Title="Valorant Tracker" Height="220" Width="320"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize">
+    <StackPanel Margin="24" VerticalAlignment="Center">
+        <TextBlock Text="Today" FontSize="16" FontWeight="Bold" Margin="0,0,0,12"/>
 
-    </Grid>
+        <TextBlock Text="Active" FontSize="12" Foreground="Gray"/>
+        <TextBlock x:Name="ActiveText" Text="0h 0m" FontSize="24" Margin="0,0,0,12"/>
+
+        <TextBlock Text="Idle (in menus)" FontSize="12" Foreground="Gray"/>
+        <TextBlock x:Name="IdleText" Text="0h 0m" FontSize="24"/>
+    </StackPanel>
 </Window>
