@@ -136,7 +136,7 @@
                             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                                 <Button x:Name="PrevDayButton" Content="&#x2039;" Style="{StaticResource CaptionButtonStyle}" Click="PrevDay_Click"/>
                                 <TextBlock x:Name="SelectedDayText" Text="TODAY" Style="{StaticResource MonoLabel}" VerticalAlignment="Center"
-                                           Margin="4,0" MinWidth="100" TextAlignment="Center" Cursor="Hand" MouseLeftButtonDown="SelectedDayText_Click"/>
+                                           Background="Transparent" Margin="4,0" MinWidth="100" TextAlignment="Center" Cursor="Hand" MouseLeftButtonDown="SelectedDayText_Click"/>
                                 <Button x:Name="NextDayButton" Content="&#x203A;" Style="{StaticResource CaptionButtonStyle}" Click="NextDay_Click"/>
                             </StackPanel>
                         </Grid>
@@ -208,7 +208,7 @@
                         </Border>
                     </Grid>
 
-                    <!-- Match History: placeholder for future RR-gain tracking -->
+                    <!-- Match History: per-match results pulled from the Riot pd API -->
                     <Grid x:Name="HistoryPanel" Margin="32,28,32,28" Visibility="Collapsed">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
@@ -217,12 +217,10 @@
                         <TextBlock Grid.Row="0" Text="MATCH HISTORY" FontFamily="{StaticResource DisplayFont}" FontSize="20"
                                    Foreground="{StaticResource TextBrush}" Margin="0,0,0,20"/>
                         <Border Grid.Row="1" Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource HairlineBrush}"
-                                BorderThickness="1" VerticalAlignment="Top" Padding="20">
-                            <StackPanel>
-                                <TextBlock Text="COMING SOON" Style="{StaticResource EyebrowLabel}" Foreground="{StaticResource IdleBrush}"/>
-                                <TextBlock Foreground="{StaticResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,8,0,0"
-                                           Text="Per-match results with RR gain/loss will show up here once ranked tracking is wired up."/>
-                            </StackPanel>
+                                BorderThickness="1">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <StackPanel x:Name="HistoryList"/>
+                            </ScrollViewer>
                         </Border>
                     </Grid>
 

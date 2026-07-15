@@ -13,6 +13,7 @@ public partial class App : System.Windows.Application
     private NotifyIcon? _notifyIcon;
     private CancellationTokenSource? _cancellationTokenSource;
     private Database? _database;
+    private MatchHistoryService? _matchHistory;
     private MainWindow? _mainWindow;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -20,7 +21,8 @@ public partial class App : System.Windows.Application
         base.OnStartup(e);
 
         _database = new Database();
-        var tracker = new Tracker(_database);
+        _matchHistory = new MatchHistoryService(_database);
+        var tracker = new Tracker(_database, _matchHistory);
 
         _cancellationTokenSource = new CancellationTokenSource();
         Task.Run(() => tracker.RunAsync(_cancellationTokenSource.Token));
@@ -43,7 +45,7 @@ public partial class App : System.Windows.Application
     {
         if (_mainWindow == null)
         {
-            _mainWindow = new MainWindow(_database!);
+            _mainWindow = new MainWindow(_database!, _matchHistory!);
             _mainWindow.Closed += (_, _) => _mainWindow = null;
         }
 

@@ -7,22 +7,44 @@ namespace ValorantTracker.Core
 
     public static class MatchCalculator
     {
-        // Every INGAME event is one match: it starts when the state becomes INGAME
-        // and ends when the next event fires (back to MENUS, or CLOSED). If it's the
-        // last event overall, the match is still ongoing (End = null).
-        public static List<Match> Calculate(List<(DateTime Timestamp, string State, string? Mode)> events)
+        // A match runs from the first INGAME event until the next non-INGAME event.
+        // Consecutive INGAME rows (e.g. the queue/mode value populating a poll cycle
+        // after the state already flipped to INGAME) are merged into the same match
+        // rather than starting a new one, using the latest non-empty mode seen.
+        //
+        // If the match is still open when the event list runs out, `windowEnd` decides
+        // what "still going" means: pass null for a live, unbounded query (the match is
+        // genuinely still in progress right now: End = null). Pass the query's upper
+        // bound for a bounded window (e.g. a past day) so a match that merely outlasted
+        // the window gets closed at the window edge instead of being reported as
+        // open-ended forever.
+        public static List<Match> Calculate(List<(DateTime Timestamp, string State, string? Mode)> events, DateTime? windowEnd = null)
         {
             var matches = new List<Match>();
 
-            for (var i = 0; i < events.Count; i++)
-            {
-                var (timestamp, state, mode) = events[i];
-                if (state != "INGAME")
-                    continue;
+            DateTime? matchStart = null;
+            string? matchMode = null;
 
-                var end = i + 1 < events.Count ? events[i + 1].Timestamp : (DateTime?)null;
-                matches.Add(new Match(timestamp, end, mode));
+            foreach (var (timestamp, state, mode) in events)
+            {
+                if (state == "INGAME")
+                {
+                    matchStart ??= timestamp;
+                    if (!string.IsNullOrEmpty(mode))
+                        matchMode = mode;
+                    continue;
+                }
+
+                if (matchStart.HasValue)
+                {
+                    matches.Add(new Match(matchStart.Value, timestamp, matchMode));
+                    matchStart = null;
+                    matchMode = null;
+                }
             }
+
+            if (matchStart.HasValue)
+                matches.Add(new Match(matchStart.Value, windowEnd, matchMode));
 
             return matches;
         }

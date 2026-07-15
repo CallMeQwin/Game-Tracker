@@ -21,10 +21,11 @@ public partial class MainWindow : Window
     private const double LabelGutterWidth = 46;
     private const double MinCardHeight = 58;
 
-    private static readonly FontFamily MonoFont = new("Consolas");
     private static readonly FontFamily BodyFont = new("Segoe UI Semibold");
 
     private readonly Database _database;
+    private readonly MatchHistoryService _matchHistory;
+    private readonly Action _matchesUpdatedHandler;
     private readonly DispatcherTimer _refreshTimer;
     private readonly DispatcherTimer _clockTimer;
 
@@ -36,16 +37,30 @@ public partial class MainWindow : Window
     private readonly Brush _idleBrush;
     private readonly Brush _alertBrush;
     private readonly Brush _offBrush;
+    private readonly FontFamily _monoFont;
 
     private List<Match> _lastTodayMatches = new();
     private List<DayPlaytime> _lastTrendBreakdown = new();
     private DateTime _selectedDay = DateTime.Now.Date;
+    private DateTime _lastKnownToday = DateTime.Now.Date;
     private bool _pulsing;
 
-    public MainWindow(Database database)
+    public MainWindow(Database database, MatchHistoryService matchHistory)
     {
         InitializeComponent();
         _database = database;
+        _matchHistory = matchHistory;
+
+        // Sync runs on a background thread; hop to the UI thread to re-render. The
+        // handler is kept in a field so it can be unsubscribed on close — the service
+        // outlives this window (it's recreated every time the tray icon reopens it).
+        _matchesUpdatedHandler = () => Dispatcher.BeginInvoke(() =>
+        {
+            if (HistoryPanel.Visibility == Visibility.Visible)
+                RefreshHistory();
+        });
+        _matchHistory.MatchesUpdated += _matchesUpdatedHandler;
+        Closed += (_, _) => _matchHistory.MatchesUpdated -= _matchesUpdatedHandler;
 
         _surfaceRaisedBrush = (Brush)FindResource("SurfaceRaisedBrush");
         _hairlineBrush = (Brush)FindResource("HairlineBrush");
@@ -55,6 +70,7 @@ public partial class MainWindow : Window
         _idleBrush = (Brush)FindResource("IdleBrush");
         _alertBrush = (Brush)FindResource("AlertBrush");
         _offBrush = (Brush)FindResource("OffBrush");
+        _monoFont = (FontFamily)FindResource("MonoFont");
 
         UpdateClock();
 
@@ -85,12 +101,23 @@ public partial class MainWindow : Window
         };
         _refreshTimer.Tick += (_, _) =>
         {
+            var today = DateTime.Now.Date;
+            if (today > _lastKnownToday)
+            {
+                // Only auto-follow the rollover if the user was tracking "today" live;
+                // someone who navigated to a specific past day stays put.
+                if (_selectedDay == _lastKnownToday)
+                    _selectedDay = today;
+                _lastKnownToday = today;
+            }
+
             RefreshStatus();
             // A past day's data is static — re-rendering it on every tick would keep
             // resetting the user's scroll position for no reason. Only today updates live.
-            if (_selectedDay == DateTime.Now.Date)
+            if (_selectedDay == today)
                 RefreshOverview();
-            RefreshTrends();
+            if (TrendsPanel.Visibility == Visibility.Visible)
+                RefreshTrends();
         };
         _refreshTimer.Start();
 
@@ -117,12 +144,25 @@ public partial class MainWindow : Window
         OverviewPanel.Visibility = NavOverview.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         TrendsPanel.Visibility = NavTrends.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         HistoryPanel.Visibility = NavHistory.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+
+        // Refresh immediately on navigating into Trends so it isn't stale for up to
+        // 5 seconds until the next timer tick (which now skips Trends while hidden).
+        if (NavTrends.IsChecked == true)
+            RefreshTrends();
+
+        // History only changes when a sync stores something (which raises MatchesUpdated),
+        // so rendering on nav-in is enough — no timer involvement.
+        if (NavHistory.IsChecked == true)
+            RefreshHistory();
     }
 
     private void TrendPeriod_Changed(object sender, RoutedEventArgs e) => RefreshTrends();
 
     private void PrevDay_Click(object sender, RoutedEventArgs e)
     {
+        if (_selectedDay <= DateTime.MinValue.AddDays(1))
+            return;
+
         _selectedDay = _selectedDay.AddDays(-1);
         RefreshOverview();
     }
@@ -177,13 +217,13 @@ public partial class MainWindow : Window
         var today = now.Date;
         var isToday = _selectedDay == today;
 
-        // GetEventsSince has no upper bound, so for a past day it would also pull in
-        // everything up through today — trim it back down to just the selected day.
-        var events = _database.GetEventsSince(Game, _selectedDay)
-            .Where(e => e.Timestamp < _selectedDay.AddDays(1))
-            .ToList();
+        var events = _database.GetEventsInRange(Game, _selectedDay, _selectedDay.AddDays(1));
+        // Live/unbounded when viewing today (a still-open match reads as "ongoing");
+        // closed at the window edge for a past day (avoids a bogus multi-day duration
+        // for a match that merely outlasted the day being viewed).
+        DateTime? windowEnd = isToday ? null : _selectedDay.AddDays(1);
 
-        _lastTodayMatches = MatchCalculator.Calculate(events);
+        _lastTodayMatches = MatchCalculator.Calculate(events, windowEnd);
         PlaytimeText.Text = Format(StatsCalculator.CalculatePlaytime(_lastTodayMatches, now));
         MatchCountText.Text = FormatMatchCount(_lastTodayMatches.Count);
 
@@ -226,6 +266,191 @@ public partial class MainWindow : Window
 
         _lastTrendBreakdown = StatsCalculator.CalculateDailyBreakdown(matches, rangeStart, rangeEndExclusive, now);
         RenderTrendChart(_lastTrendBreakdown, isMonth);
+    }
+
+    private void RefreshHistory()
+    {
+        HistoryList.Children.Clear();
+
+        var matches = _database.GetRecentMatches(50);
+        if (matches.Count == 0)
+        {
+            HistoryList.Children.Add(new TextBlock
+            {
+                Text = "No matches recorded yet. Finish a match with the tracker running and it will show up here.",
+                Foreground = _textMutedBrush,
+                FontSize = 12,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(20)
+            });
+            return;
+        }
+
+        // Matches arrive newest-first, so a fresh header appears each time the day
+        // changes as we walk down the list; GroupBy preserves that ordering.
+        foreach (var dayGroup in matches.GroupBy(match => match.StartTime.Date))
+        {
+            var dayMatches = dayGroup.ToList();
+            HistoryList.Children.Add(BuildDateHeader(dayGroup.Key, dayMatches));
+            foreach (var match in dayMatches)
+                HistoryList.Children.Add(BuildMatchRow(match));
+        }
+    }
+
+    private Border BuildDateHeader(DateTime day, List<StoredMatch> dayMatches)
+    {
+        var today = DateTime.Now.Date;
+        var label = day == today ? "TODAY"
+            : day == today.AddDays(-1) ? "YESTERDAY"
+            : day.ToString("ddd · MMM d").ToUpperInvariant();
+
+        var wins = dayMatches.Count(match => match.Result == "Win");
+        var losses = dayMatches.Count(match => match.Result == "Loss");
+        var hasRR = dayMatches.Any(match => match.RRChange.HasValue);
+        var netRR = dayMatches.Where(match => match.RRChange.HasValue).Sum(match => match.RRChange!.Value);
+
+        var summary = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        summary.Children.Add(new TextBlock
+        {
+            Text = $"{wins}W {losses}L",
+            FontFamily = _monoFont,
+            FontSize = 11,
+            Foreground = _textMutedBrush,
+            VerticalAlignment = VerticalAlignment.Center
+        });
+        if (hasRR)
+        {
+            summary.Children.Add(new TextBlock
+            {
+                Text = netRR > 0 ? $"   +{netRR} RR" : $"   {netRR} RR",
+                FontFamily = _monoFont,
+                FontSize = 11,
+                Foreground = netRR > 0 ? _activeBrush : netRR < 0 ? _alertBrush : _textMutedBrush,
+                VerticalAlignment = VerticalAlignment.Center
+            });
+        }
+
+        var dateLabel = new TextBlock
+        {
+            Text = label,
+            FontFamily = (FontFamily)FindResource("DisplayFont"),
+            FontSize = 12,
+            Foreground = _textBrush,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+
+        var header = new Grid();
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Grid.SetColumn(dateLabel, 0);
+        Grid.SetColumn(summary, 1);
+        header.Children.Add(dateLabel);
+        header.Children.Add(summary);
+
+        return new Border
+        {
+            Background = _surfaceRaisedBrush,
+            Padding = new Thickness(14, 8, 12, 8),
+            Child = header
+        };
+    }
+
+    private Border BuildMatchRow(StoredMatch match)
+    {
+        var accentBrush = match.Result switch
+        {
+            "Win" => _activeBrush,
+            "Loss" => _alertBrush,
+            "Draw" => _idleBrush,
+            _ => _offBrush
+        };
+
+        var row = new Grid();
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(3) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(80) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(110) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(70) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(80) });
+
+        var accent = new System.Windows.Shapes.Rectangle { Fill = accentBrush };
+        Grid.SetColumn(accent, 0);
+        row.Children.Add(accent);
+
+        var title = StatusFormatter.FormatModeName(match.Queue) + " — " + match.Map;
+        if (!string.IsNullOrEmpty(match.Agent))
+            title += " · " + match.Agent;
+
+        var main = new StackPanel { Margin = new Thickness(14, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center };
+        main.Children.Add(new TextBlock { Text = title, FontFamily = BodyFont, FontSize = 12, Foreground = _textBrush, TextWrapping = TextWrapping.Wrap });
+        main.Children.Add(new TextBlock
+        {
+            Text = match.StartTime.ToString("ddd, MMM d · h:mm tt"),
+            FontFamily = _monoFont,
+            FontSize = 10,
+            Foreground = _textMutedBrush,
+            Margin = new Thickness(0, 3, 0, 0)
+        });
+        Grid.SetColumn(main, 1);
+        row.Children.Add(main);
+
+        // Deathmatch and Range/custom rows have no team rounds — show a dash.
+        var hasRounds = match.RoundsWon > 0 || match.RoundsLost > 0;
+        var scoreText = hasRounds ? $"{match.RoundsWon}–{match.RoundsLost}" : "—";
+        row.Children.Add(BuildStatCell("SCORE", scoreText, 2, hasRounds ? accentBrush : _textMutedBrush));
+
+        row.Children.Add(BuildStatCell("K / D / A", $"{match.Kills} / {match.Deaths} / {match.Assists}", 3, _textBrush));
+
+        // ACS (average combat score) is the per-round score players are used to seeing
+        // on the in-game scoreboard.
+        var acsText = match.RoundsPlayed > 0 ? ((int)Math.Round((double)match.Score / match.RoundsPlayed)).ToString() : "—";
+        row.Children.Add(BuildStatCell("ACS", acsText, 4, _textBrush));
+
+        string rrText;
+        Brush rrBrush;
+        if (match.RRChange.HasValue)
+        {
+            rrText = match.RRChange.Value > 0 ? $"+{match.RRChange.Value}" : match.RRChange.Value.ToString();
+            rrBrush = match.RRChange.Value > 0 ? _activeBrush : match.RRChange.Value < 0 ? _alertBrush : _textMutedBrush;
+        }
+        else
+        {
+            // Non-competitive queues never get RR; a competitive match whose RR update
+            // hasn't landed yet shows the same placeholder until the next sync fills it.
+            rrText = "—";
+            rrBrush = _textMutedBrush;
+        }
+        row.Children.Add(BuildStatCell("RR", rrText, 5, rrBrush));
+
+        return new Border
+        {
+            BorderBrush = _hairlineBrush,
+            BorderThickness = new Thickness(0, 0, 0, 1),
+            Padding = new Thickness(0, 12, 12, 12),
+            Child = row
+        };
+    }
+
+    private StackPanel BuildStatCell(string label, string value, int column, Brush valueBrush)
+    {
+        var cell = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        cell.Children.Add(new TextBlock
+        {
+            Text = label,
+            FontFamily = (FontFamily)FindResource("DisplayFont"),
+            FontSize = 9,
+            Foreground = _textMutedBrush
+        });
+        cell.Children.Add(new TextBlock
+        {
+            Text = value,
+            FontFamily = _monoFont,
+            FontSize = 13,
+            Foreground = valueBrush,
+            Margin = new Thickness(0, 2, 0, 0)
+        });
+        Grid.SetColumn(cell, column);
+        return cell;
     }
 
     private void UpdateStatusDot(string? state)
@@ -292,7 +517,7 @@ public partial class MainWindow : Window
             var label = new TextBlock
             {
                 Text = hour.ToString("h tt"),
-                FontFamily = MonoFont,
+                FontFamily = _monoFont,
                 FontSize = 10,
                 Foreground = _textMutedBrush
             };
@@ -355,7 +580,7 @@ public partial class MainWindow : Window
             var (match, top, height) = placedMatches[i];
             var columnCount = columnCounts[i];
             var availableWidth = canvasWidth - LabelGutterWidth - 8;
-            var columnWidth = availableWidth / columnCount;
+            var columnWidth = Math.Max(availableWidth / columnCount, 40);
 
             var end = match.End ?? now;
             var title = StatusFormatter.FormatModeName(match.Mode);
@@ -368,8 +593,8 @@ public partial class MainWindow : Window
                 Children =
                 {
                     new TextBlock { Text = title, FontFamily = BodyFont, FontSize = 12, Foreground = _textBrush, TextWrapping = TextWrapping.Wrap },
-                    new TextBlock { Text = timeRange, FontFamily = MonoFont, FontSize = 10, Foreground = _textMutedBrush, Margin = new Thickness(0, 3, 0, 0), TextWrapping = TextWrapping.Wrap },
-                    new TextBlock { Text = duration, FontFamily = MonoFont, FontSize = 10, Foreground = _textMutedBrush, Margin = new Thickness(0, 1, 0, 0), TextWrapping = TextWrapping.Wrap }
+                    new TextBlock { Text = timeRange, FontFamily = _monoFont, FontSize = 10, Foreground = _textMutedBrush, Margin = new Thickness(0, 3, 0, 0), TextWrapping = TextWrapping.Wrap },
+                    new TextBlock { Text = duration, FontFamily = _monoFont, FontSize = 10, Foreground = _textMutedBrush, Margin = new Thickness(0, 1, 0, 0), TextWrapping = TextWrapping.Wrap }
                 }
             };
 
@@ -395,7 +620,7 @@ public partial class MainWindow : Window
             var columnGap = columnCount > 1 ? 4 : 0;
             Canvas.SetLeft(card, LabelGutterWidth + 4 + columnIndex * columnWidth);
             Canvas.SetTop(card, top);
-            card.Width = Math.Max(columnWidth - columnGap, 40);
+            card.Width = columnWidth - columnGap;
             card.Height = height;
             TimelineCanvas.Children.Add(card);
         }
@@ -495,7 +720,7 @@ public partial class MainWindow : Window
             var label = new TextBlock
             {
                 Text = isMonth ? day.Day.Day.ToString() : day.Day.ToString("ddd").Substring(0, 1),
-                FontFamily = MonoFont,
+                FontFamily = _monoFont,
                 FontSize = 9,
                 Foreground = _textMutedBrush
             };
