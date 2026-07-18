@@ -42,9 +42,13 @@ namespace ValorantTracker.Core
             _port = int.Parse(parts[2]);
             var password = parts[3];
 
+            // The Riot Client's local API uses a self-signed cert, so validation must be
+            // bypassed — but only for loopback. If this client were ever pointed at a
+            // non-local URL, normal certificate validation still applies.
             var handler = new HttpClientHandler
             {
-                ServerCertificateCustomValidationCallback = (msg, cert, chain, errors) => true
+                ServerCertificateCustomValidationCallback = (msg, cert, chain, errors) =>
+                    msg.RequestUri != null && msg.RequestUri.IsLoopback
             };
             _httpClient = new HttpClient(handler);
 
